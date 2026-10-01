@@ -12,8 +12,8 @@
 # ═════════════════════════════════════════════════════════════════════
 import os, sys, json, time, traceback
 import numpy as np, pandas as pd
-from core import (L1, UNIV_N, STABLE, EXCL_PREFIX, QUIET_BTC, ALONE_N, CROWD_N, COST, STEP,
-                  week_of, mg_arrays, align, sim_path, sim_open, now_js_p, sig_detail, reb60_1h, ret48_series)
+from core import (L1, UNIV_N, STABLE, EXCL_PREFIX, QUIET_BTC, ALONE_N, CROWD_N, COST, STEP, C2_BTC, C2_MOV, MOV_PCT,
+                  week_of, mg_arrays, align, sim_path, sim_open, now_js_p, sig_detail, reb60_1h, ret48_series, r48_now)
 
 ROOT   = os.path.dirname(os.path.abspath(__file__))
 F_STATE= os.path.join(ROOT,"state","state.json")
@@ -21,6 +21,7 @@ F_SIG  = os.path.join(ROOT,"data","signals.csv")
 F_TRD  = os.path.join(ROOT,"data","trades.csv")
 F_RUN  = os.path.join(ROOT,"data","runs.csv")
 F_REP  = os.path.join(ROOT,"report.md")
+F_REG  = os.path.join(ROOT,"data","regime.csv")
 
 H        = pd.Timedelta(hours=1)
 M30      = pd.Timedelta(minutes=30)
@@ -172,11 +173,12 @@ def main(src=None, now=None):
     btc48=ret48_series(btc) if len(btc) else pd.Series(dtype=float)
 
     # 3) 신호 (▲now 모사 · 완성된 1H 키만)
-    kset=set(keys); fails=0
+    kset=set(keys); fails=0; R48={}; NOW48={}
     for s in scan:
         try:
             d1=src.ohlcv(s,"1h",start-N1H*H,last_done+H)
             d30=src.ohlcv(s,"30m",start-WARM30*M30,last_done+H)
+            if len(d1): R48[s]=ret48_series(d1); NOW48[s]=r48_now(d1)
             if len(d1)<200 or len(d30)<WARM30//2: continue
             js=now_js_p(d1,d30,L1)
             if len(js)==0: continue
@@ -201,6 +203,23 @@ def main(src=None, now=None):
         log(f"실패 {fails}/{len(scan)} — 이번 실행은 저장하지 않음 (다음 실행에서 같은 구간 다시 처리)")
         append_run(now,len(keys),0,fails,errors,t0,"abort"); sys.exit(1)
 
+    # 장세 C2 = |BTC 48h| ≤ 3 & 그 주 우주 중 48h 등락 |≥10%| 종목 비율 ≤ 20%  (키 시점에 알 수 있는 값만)
+    def mov_at(key):
+        mem=st["univ"].get(str(wk_of_key[key].date()),[]); v=[R48[m].get(key,np.nan) for m in mem if m in R48]
+        v=np.array([x for x in v if x==x]); return float((np.abs(v)>=MOV_PCT).mean()*100) if len(v) else np.nan
+    MOV={k:mov_at(k) for k in keys}
+    reg=pd.DataFrame([dict(key=str(k),key_kst=str(k+KST),btc48=round(btc48.get(k,np.nan),3),mov=round(MOV[k],1) if MOV[k]==MOV[k] else np.nan) for k in keys])
+    if len(reg):
+        reg["c2"]=((reg.btc48.abs()<=C2_BTC)&(reg.mov<=C2_MOV)).astype(int)
+        reg["backfill"]=[int(backfill_until is not None and pd.Timestamp(k)<backfill_until) for k in reg.key]
+    # 지금 진행 중인 봉(다음 키)의 장세 — 직전 완성봉까지의 값
+    if len(keys):
+        nk=keys[-1]+H; mem=st["univ"].get(str(pd.Timestamp(week_of(pd.DatetimeIndex([nk]))[0]).date()),[])
+        v=np.array([NOW48[m] for m in mem if m in NOW48 and NOW48[m]==NOW48[m]])
+        b=r48_now(btc) if len(btc) else np.nan; mv=float((np.abs(v)>=MOV_PCT).mean()*100) if len(v) else np.nan
+        st["regime_now"]=dict(key_kst=str(nk+KST),btc48=round(b,2),mov=round(mv,1),n=int(len(v)),
+                              c2=int(abs(b)<=C2_BTC and mv<=C2_MOV) if b==b and mv==mv else None)
+
     # nsig = 같은 1H 키에서 유효 신호가 선 우주 종목 수
     S=pd.DataFrame(sigs_new)
     if len(S):
@@ -208,6 +227,8 @@ def main(src=None, now=None):
         S["nsig"]=S["key"].map(ns).fillna(0).astype(int)
         S["quiet"]=(S.btc48.abs()<=QUIET_BTC).astype(int); S["alone"]=(S.nsig<=ALONE_N).astype(int)
         S["crowd"]=(S.nsig>=CROWD_N).astype(int); S["T"]=(S.quiet&S.alone).astype(int)
+        S["mov"]=S["key"].map(lambda k:MOV.get(pd.Timestamp(k),np.nan)).round(1)
+        S["c2"]=((S.btc48.abs()<=C2_BTC)&(S.mov<=C2_MOV)).astype(int)
         S=S.sort_values(["bar","sym"]).reset_index(drop=True)
 
     # 4) 열린 거래 갱신
@@ -232,18 +253,20 @@ def main(src=None, now=None):
             if stt is None: raise ValueError("진입봉 없음")
             (fill_closed if stt=="closed" else fill_open)(t,r)
             trades.append(t); taken.append(1); skip.append("")
-            log(f"  ▲ {q.sym} {q.entry_kst} KST · 손절 {q.stop_pct:.1f}% · nsig {q.nsig} · btc48 {q.btc48:+.1f} {'★T' if q['T'] else ''}")
+            log(f"  ▲ {q.sym} {q.entry_kst} KST · 손절 {q.stop_pct:.1f}% · nsig {q.nsig} · btc48 {q.btc48:+.1f} · mov {q.mov} · {'C2통과' if q.c2 else 'C2차단'}")
         except Exception as e:
             taken.append(0); skip.append(f"오류 {str(e)[:40]}"); errors.append(f"new {q.sym}: {str(e)[:80]}")
     if len(S): S["taken"]=taken; S["skip"]=skip
 
     # 6) 저장
     os.makedirs(os.path.dirname(F_SIG),exist_ok=True)
+    if len(reg):
+        old=read_csv(F_REG); pd.concat([old,reg],ignore_index=True).to_csv(F_REG,index=False,encoding="utf-8-sig")
     if len(S):
         old=read_csv(F_SIG); pd.concat([old,S],ignore_index=True).to_csv(F_SIG,index=False,encoding="utf-8-sig")
     if trades:
         TD=pd.DataFrame(trades); first_cols=["id","status","sym","entry_kst","ep","stop0","stop_pct","exit_kst","exit_px","reason","ret","R","hold_h",
-            "T","quiet","alone","crowd","nsig","btc48","rs48","reb60","backfill"]
+            "c2","mov","T","quiet","alone","crowd","nsig","btc48","rs48","reb60","backfill"]
         TD=TD[[c for c in first_cols if c in TD]+[c for c in TD if c not in first_cols]].sort_values("bar")
         TD.to_csv(F_TRD,index=False,encoding="utf-8-sig")
     if len(keys): st["last_key"]=str(keys[-1])
@@ -271,7 +294,15 @@ def slot2(o):
     return o.loc[keep]
 
 def write_report(st,now):
-    TD=read_csv(F_TRD); L=[f"# coin-forward · L1 전향 기록\n",f"갱신 {now+KST:%Y-%m-%d %H:%M} KST · 실행 {st.get('runs',0)}회 · 실시간 기록 시작 {pd.Timestamp(st['live_from'])+KST:%Y-%m-%d %H:%M} KST (그 전은 소급·집계 제외)\n"]
+    TD=read_csv(F_TRD); L=[f"# coin-forward · L1 전향 기록\n"]
+    rn=st.get("regime_now")
+    if rn:
+        tag="🟢 조용 — 진입 OK" if rn["c2"]==1 else ("🔴 시끄 — 진입 쉼" if rn["c2"]==0 else "⚪ 계산 불가")
+        L.append(f"## 지금 장세 C2: {tag}\n\n{rn['key_kst'][5:16]} KST 봉 기준 · BTC 48h {rn['btc48']:+.2f}% (기준 ±{C2_BTC:g}) · 큰 움직임 종목 {rn['mov']:.0f}% ({rn['n']}종목 중 48h ±{MOV_PCT:g}% 이상 · 기준 ≤{C2_MOV:g}%)\n")
+    R=read_csv(F_REG)
+    if len(R):
+        R=R.tail(24); L.append("최근 24시간 C2: "+"".join("🟢" if c==1 else "🔴" for c in R.c2)+" (왼쪽이 과거)\n")
+    L.append(f"갱신 {now+KST:%Y-%m-%d %H:%M} KST · 실행 {st.get('runs',0)}회 · 실시간 기록 시작 {pd.Timestamp(st['live_from'])+KST:%Y-%m-%d %H:%M} KST (그 전은 소급·집계 제외)\n")
     if len(TD)==0:
         L.append("\n아직 거래 없음.\n")
     else:
@@ -282,14 +313,18 @@ def write_report(st,now):
         L+=["\n## 청산된 거래 (실시간 · 비용 0.1% 차감 · %)\n","| 구분 | n | 승률 | PF | 건당 | 합 | 보유h |","|---|---|---|---|---|---|---|",
             row("전체",C), row("★ T 조용한 장 & 혼자",C[C["T"]==1]), row("나머지",C[C["T"]==0]),
             row("조용한 장",C[C.quiet==1]), row("시끄러운 장",C[C.quiet==0]), row("혼자 nsig=1",C[C.alone==1]),
-            row("2~3개 동시",C[(C.nsig>=2)&(C.nsig<=3)]), row("묶음 nsig≥4",C[C.crowd==1])]
+            row("2~3개 동시",C[(C.nsig>=2)&(C.nsig<=3)]), row("묶음 nsig≥4",C[C.crowd==1]),
+            row("C2 통과",C[C.c2==1] if "c2" in C else C.iloc[0:0]), row("C2 차단",C[C.c2==0] if "c2" in C else C.iloc[0:0])]
         if len(C):
-            k=slot2(C); L.append(f"\n2슬롯 시뮬: {len(k)}건 · PF {pf(k['ret'])} · 합 {k['ret'].sum():+.1f}%\n")
+            k=slot2(C); L.append(f"\n2슬롯 시뮬 · 전체 L1: {len(k)}건 · PF {pf(k['ret'])} · 합 {k['ret'].sum():+.1f}%")
+            if "c2" in C:
+                kc=slot2(C[C.c2==1]); L.append(f"2슬롯 시뮬 · **C2 통과만**: {len(kc)}건 · PF {pf(kc['ret'])} · 합 {kc['ret'].sum():+.1f}%")
+            L.append("\n실전 판정 (2026-10-01 고정): C2 2슬롯 청산 60건에서 PF ≥ 1.2 이고 합이 전체 L1 2슬롯보다 높으면 C2 확정. 과거 630일: C2 PF 1.41 · 하루 1.04 · 전체 1.17.\n")
         L.append("\n과거 630일 기준(같은 규칙): L1 PF 1.20 · 건당 +0.22 — T/나머지 비교는 coin_quiet_alone.py 결과와 나란히 볼 것.\n")
         O=TD[TD.status=="open"]
         L+=["\n## 보유 중\n","| 종목 | 진입(KST) | 진입가 | 초기손절 | 현재 손절선 | 평가% | 최고R | T | nsig |","|---|---|---|---|---|---|---|---|---|"]
         for _,t in O.iterrows():
-            L.append(f"| {t.sym} | {t.entry_kst[5:16]} | {t.ep:.6g} | {t.stop0:.6g} (-{t.stop_pct:.1f}%) | {t.stop_now:.6g} | {t.unreal:+.2f} | {t.hiR:.2f} | {'★' if t['T'] else ''} | {t.nsig} |")
+            L.append(f"| {t.sym}{' (C2차단)' if t.get('c2',1)==0 else ''} | {t.entry_kst[5:16]} | {t.ep:.6g} | {t.stop0:.6g} (-{t.stop_pct:.1f}%) | {t.stop_now:.6g} | {t.unreal:+.2f} | {t.hiR:.2f} | {'★' if t['T'] else ''} | {t.nsig} |")
         R=TD.sort_values("bar").tail(15).iloc[::-1]
         L+=["\n## 최근 거래 15\n","| 종목 | 진입(KST) | 상태 | 사유 | 결과% | R | btc48 | nsig | T | 소급 |","|---|---|---|---|---|---|---|---|---|---|"]
         for _,t in R.iterrows():

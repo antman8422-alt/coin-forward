@@ -18,6 +18,9 @@ STABLE   = {"USDC","FDUSD","TUSD","BUSD","DAI","USDP","USDE","USD1","EUR","EURI"
 QUIET_BTC = 3.0   # 조용한 장 = |btc48| ≤ 3
 ALONE_N   = 1     # 혼자 = nsig 1
 CROWD_N   = 4     # 묶음 = nsig ≥ 4
+C2_BTC    = 3.0   # 장세 C2: |BTC 48h| ≤ 3
+MOV_PCT   = 10.0  #          48h 등락 절댓값 ≥ 10% 를 '큰 움직임'으로
+C2_MOV    = 20.0  #          그 주 우주 중 큰 움직임 종목 비율 ≤ 20%  (coin_quiet_gate.py C2 · 2026-10-01 채택 후보)
 
 B3 = dict(eTf="1H", look=30,  hi=10, surge=3,  brk=48, swing=24, vlen=80, vmult=1.5, box=1e9,  spike=1e9,  reb=(0.0,1e9),   sl=(4.0,10.0), hold_h=24, mgmt="30m")
 L1 = dict(B3, reb=(5.0,1e9))
@@ -102,6 +105,11 @@ def sig_detail(ed, md, Q, j):
 def reb60_1h(d1):
     c=d1["close"].shift(1); l=d1["low"].shift(1)
     return ((c/l.rolling(1440,min_periods=720).min()-1)*100).values
+
+def r48_now(d1):
+    """지금 진행 중인 봉에서 아는 48h 등락 = 마지막 완성봉 종가 / 48봉 전 종가"""
+    c=d1["close"].astype(float).values
+    return (c[-1]/c[-49]-1)*100 if len(c)>=49 else np.nan
 
 def ret48_series(d1):
     c=d1.set_index("dt")["close"].astype(float)

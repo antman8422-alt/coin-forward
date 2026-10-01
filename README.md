@@ -7,7 +7,7 @@ L1(1H 구조판) 신호를 **앞으로** 쌓는 기록기. GitHub Actions가 매
 
 ## 설치 (한 번만)
 
-1. GitHub에서 **새 저장소** 만들기 (예: `coin-forward`, Private 권장). 기존 상보 저장소와 분리.
+1. GitHub에서 **새 저장소** 만들기 (예: `coin-forward`, Public 권장 — Actions 무료 무제한). 기존 상보 저장소와 분리.
 2. 이 폴더 파일 전부 업로드 (`.github/workflows/hourly.yml` 포함 — 숨김 폴더라 빠지기 쉬움).
    웹에서 올릴 때: *Add file → Upload files* 에 폴더째 끌어놓기.
 3. 저장소 **Settings → Actions → General → Workflow permissions → Read and write permissions** 선택 후 Save.
@@ -20,9 +20,10 @@ L1(1H 구조판) 신호를 **앞으로** 쌓는 기록기. GitHub Actions가 매
 
 | 파일 | 내용 |
 |---|---|
-| `report.md` | 요약 — 청산 거래 성적(전체 / ★T / 나머지 / 조용·시끄 / 동시 신호 수별), 2슬롯 시뮬, 보유 중, 최근 15건, 이번 주 우주 |
+| `report.md` | **맨 위 = 지금 장세 C2 (🟢 진입 OK / 🔴 쉼) + 최근 24시간 막대** · 요약 — 청산 거래 성적(전체 / ★T / 나머지 / 조용·시끄 / 동시 신호 수별), 2슬롯 시뮬, 보유 중, 최근 15건, 이번 주 우주 |
 | `data/trades.csv` | 실제 진입한 거래 (종목당 1포지션). 열린 거래는 매 실행 진입부터 다시 계산해 청산되면 `closed` 로 바뀜 |
 | `data/signals.csv` | 우주 안의 모든 ▲now 신호 (진입 안 한 것 포함 · `taken`, `skip` 사유) — 추가만 됨 |
+| `data/regime.csv` | 1H 봉마다 장세 기록 (btc48 · mov · c2) |
 | `data/runs.csv` | 실행 기록 (처리한 봉 수, 실패, 소요 시간) |
 | `state/state.json` | 마지막 처리 봉, 주별 우주 명단 |
 | `core.py` | 신호·관리 규칙 (과거 분석과 동일 · **고치지 말 것**) |
@@ -34,6 +35,13 @@ L1(1H 구조판) 신호를 **앞으로** 쌓는 기록기. GitHub Actions가 매
 - 보유 중: `stop_now` 현재 손절선(3×ATR 트레일 반영) · `unreal` 평가 % · `hiR` 최고 도달 R
 - 태그: `btc48` BTC 48h % · `quiet` (|btc48|≤3) · `nsig` 같은 1H 봉 동시 신호 수 · `alone` (=1) · `crowd` (≥4) · **`T` (조용 & 혼자)** · `rs48` 종목−BTC 48h %p · `reb60` 60일 저점 대비 반등 % · `sl1h` 1H 24봉 스윙 기준 SL% · `vmult` 거래량 배수 · `reb30` 30봉 반등 %
 - `backfill=1` 첫 실행 때 소급한 72시간 — 성적 집계에서 빠짐
+
+## 장세 C2 (2026-10-01 추가)
+
+- C2 통과 = |BTC 48h| ≤ 3% **그리고** 그 주 우주 30종목 중 48h 등락 절댓값 ≥ 10% 인 종목 비율 ≤ 20%
+- 과거 630일 2슬롯: C2만 진입 PF 1.41 · 하루 1.04 · 합 293 (전체 L1 1.17 · 180) — coin_quiet_gate.py
+- 실전 판정 (고정): C2 2슬롯 청산 60건에서 PF ≥ 1.2 이고 합이 전체 L1 2슬롯보다 높으면 확정
+- 거래는 C2와 무관하게 전부 기록하고 `c2` 열로 구분 (차단 쪽 성적도 같이 쌓여야 비교 가능)
 
 ## 규칙 (고정)
 
