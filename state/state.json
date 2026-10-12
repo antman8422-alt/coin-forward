@@ -1,14 +1,14 @@
 {
- "last_key": "2026-10-11 20:00:00",
+ "last_key": "2026-10-12 00:00:00",
  "live_from": "2026-09-30 21:00:00",
  "regime_now": {
-  "btc48": 1.41,
-  "c2": 0,
-  "key_kst": "2026-10-12 06:00:00",
-  "mov": 23.3,
+  "btc48": 1.69,
+  "c2": 1,
+  "key_kst": "2026-10-12 10:00:00",
+  "mov": 13.3,
   "n": 30
  },
- "runs": 47,
+ "runs": 48,
  "univ": {
   "2026-09-21": [
    "BTC",
@@ -105,6 +105,38 @@
    "FARTCOIN",
    "ETHFI",
    "ASTER"
+  ],
+  "2026-10-12": [
+   "BTC",
+   "ETH",
+   "SOL",
+   "NEAR",
+   "ZEC",
+   "XRP",
+   "AAVE",
+   "AVAX",
+   "UNI",
+   "HYPE",
+   "SUI",
+   "ENA",
+   "PUMP",
+   "STRK",
+   "DOGE",
+   "TAO",
+   "ADA",
+   "BNB",
+   "INJ",
+   "ONDO",
+   "WLD",
+   "LTC",
+   "QNT",
+   "1000PEPE",
+   "LINK",
+   "YFI",
+   "FARTCOIN",
+   "ASTER",
+   "ARB",
+   "ZRO"
   ]
  }
 }
