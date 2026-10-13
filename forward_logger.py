@@ -196,7 +196,7 @@ def main(src=None, now=None):
                     ep=ep,stop0=stop,stop_pct=round((1-stop/ep)*100,3) if stop==stop else np.nan,
                     valid=int(stop==stop and ep>stop), sl1h=round(det["sl1h"],3),vmult=round(det["vmult"],3),reb30=round(det["reb30"],3),
                     reb60=round(float(r60[k1]),3) if k1>=0 else np.nan, btc48=round(b48,3), r48=round(a48,3), rs48=round(a48-b48,3),
-                    week=str(wk_of_key[key].date()), backfill=int(backfill_until is not None and key<backfill_until)))
+                    week=str(wk_of_key[key].date()), rank=(st["univ"].get(str(wk_of_key[key].date()),[]).index(s)+1), backfill=int(backfill_until is not None and key<backfill_until)))
         except Exception as e:
             fails+=1; errors.append(f"{s}: {str(e)[:80]}"); log(f"  {s} 실패 {str(e)[:80]}")
     if scan and fails>FAIL_MAX*len(scan):
@@ -306,20 +306,25 @@ def write_report(st,now):
     if len(TD)==0:
         L.append("\n아직 거래 없음.\n")
     else:
+        # 주간 거래대금 순위 (우주 명단이 순위 순서로 저장돼 있음 · 예전 거래도 여기서 계산)
+        TD["rank"]=[ (st["univ"].get(str(w),[]).index(s_)+1) if s_ in st["univ"].get(str(w),[]) else 99 for s_,w in zip(TD["sym"],TD["week"]) ]
         C=TD[(TD.status=="closed")&(TD.backfill==0)].copy()
         def row(name,x):
-            if len(x)==0: return f"| {name} | 0 | | | | | |"
-            r=x["ret"].values; return f"| {name} | {len(x)} | {(r>0).mean()*100:.0f}% | {pf(r)} | {r.mean():+.2f} | {r.sum():+.1f} | {x['hold_h'].mean():.1f} |"
-        L+=["\n## 청산된 거래 (실시간 · 비용 0.1% 차감 · %)\n","| 구분 | n | 승률 | PF | 건당 | 합 | 보유h |","|---|---|---|---|---|---|---|",
+            if len(x)==0: return f"| {name} | 0 | | | | | | |"
+            r=x["ret"].values; return f"| {name} | {len(x)} | {(r>0).mean()*100:.0f}% | {(r>=2).mean()*100:.0f}% | {pf(r)} | {r.mean():+.2f} | {r.sum():+.1f} | {x['hold_h'].mean():.1f} |"
+        L+=["\n## 청산된 거래 (실시간 · 비용 0.1% 차감 · %)\n","| 구분 | n | 승률 | +2%승 | PF | 건당 | 합 | 보유h |","|---|---|---|---|---|---|---|---|",
             row("전체",C), row("★ T 조용한 장 & 혼자",C[C["T"]==1]), row("나머지",C[C["T"]==0]),
             row("조용한 장",C[C.quiet==1]), row("시끄러운 장",C[C.quiet==0]), row("혼자 nsig=1",C[C.alone==1]),
             row("2~3개 동시",C[(C.nsig>=2)&(C.nsig<=3)]), row("묶음 nsig≥4",C[C.crowd==1]),
-            row("C2 통과",C[C.c2==1] if "c2" in C else C.iloc[0:0]), row("C2 차단",C[C.c2==0] if "c2" in C else C.iloc[0:0])]
+            row("C2 통과",C[C.c2==1] if "c2" in C else C.iloc[0:0]), row("C2 차단",C[C.c2==0] if "c2" in C else C.iloc[0:0]),
+            row("거래대금 1~10위",C[C["rank"]<=10]), row("**거래대금 11~30위**",C[C["rank"].between(11,30)])]
         if len(C):
             k=slot2(C); L.append(f"\n2슬롯 시뮬 · 전체 L1: {len(k)}건 · PF {pf(k['ret'])} · 합 {k['ret'].sum():+.1f}%")
             if "c2" in C:
                 kc=slot2(C[C.c2==1]); L.append(f"2슬롯 시뮬 · **C2 통과만**: {len(kc)}건 · PF {pf(kc['ret'])} · 합 {kc['ret'].sum():+.1f}%")
+                kr=slot2(C[(C.c2==1)&C["rank"].between(11,30)]); L.append(f"2슬롯 시뮬 · **C2 + 11~30위만**: {len(kr)}건 · PF {pf(kr['ret'])} · 합 {kr['ret'].sum():+.1f}%")
             L.append("\n실전 판정 (2026-10-01 고정): C2 2슬롯 청산 60건에서 PF ≥ 1.2 이고 합이 전체 L1 2슬롯보다 높으면 C2 확정. 과거 630일: C2 PF 1.41 · 하루 1.04 · 전체 1.17.\n")
+            L.append("순위 판정 (2026-10-12 고정): C2 + 11~30위 2슬롯 청산 60건에서 PF ≥ 1.2 이고 합이 C2 통과만(1~30위) 2슬롯보다 높으면 11~30위 확정. 과거(2025-01~2026-10): 11~30위 C2 2슬롯 PF 1.44 · 합 +260 vs 1~30위 1.26 · +197.\n")
         L.append("\n과거 630일 기준(같은 규칙): L1 PF 1.20 · 건당 +0.22 — T/나머지 비교는 coin_quiet_alone.py 결과와 나란히 볼 것.\n")
         O=TD[TD.status=="open"]
         L+=["\n## 보유 중\n","| 종목 | 진입(KST) | 진입가 | 초기손절 | 현재 손절선 | 평가% | 최고R | T | nsig |","|---|---|---|---|---|---|---|---|---|"]
