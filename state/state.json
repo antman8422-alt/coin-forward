@@ -1,14 +1,14 @@
 {
- "last_key": "2026-11-08 22:00:00",
+ "last_key": "2026-11-09 05:00:00",
  "live_from": "2026-09-30 21:00:00",
  "regime_now": {
-  "btc48": -1.89,
-  "c2": null,
-  "key_kst": "2026-11-09 08:00:00",
-  "mov": NaN,
-  "n": 0
+  "btc48": -2.05,
+  "c2": 1,
+  "key_kst": "2026-11-09 15:00:00",
+  "mov": 3.3,
+  "n": 30
  },
- "runs": 177,
+ "runs": 178,
  "univ": {
   "2026-09-21": [
    "BTC",
@@ -233,6 +233,38 @@
    "ETHFI",
    "COMP",
    "TIA"
+  ],
+  "2026-11-09": [
+   "BTC",
+   "ETH",
+   "SOL",
+   "ZEC",
+   "XRP",
+   "NEAR",
+   "1000PEPE",
+   "HYPE",
+   "AAVE",
+   "UNI",
+   "AVAX",
+   "INJ",
+   "BNB",
+   "SUI",
+   "WLD",
+   "DOGE",
+   "LINK",
+   "ENA",
+   "ADA",
+   "ONDO",
+   "JCT",
+   "ARB",
+   "BOME",
+   "ZRO",
+   "TAO",
+   "LTC",
+   "APT",
+   "TIA",
+   "ORDI",
+   "BCH"
   ]
  }
 }
