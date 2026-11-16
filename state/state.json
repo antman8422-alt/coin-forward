@@ -1,14 +1,14 @@
 {
- "last_key": "2026-11-15 21:00:00",
+ "last_key": "2026-11-16 01:00:00",
  "live_from": "2026-09-30 21:00:00",
  "regime_now": {
-  "btc48": -4.95,
+  "btc48": -5.45,
   "c2": 0,
-  "key_kst": "2026-11-16 07:00:00",
-  "mov": 33.3,
+  "key_kst": "2026-11-16 11:00:00",
+  "mov": 36.7,
   "n": 30
  },
- "runs": 201,
+ "runs": 202,
  "univ": {
   "2026-09-21": [
    "BTC",
@@ -265,6 +265,38 @@
    "TIA",
    "ORDI",
    "BCH"
+  ],
+  "2026-11-16": [
+   "BTC",
+   "ETH",
+   "SOL",
+   "ZEC",
+   "1000PEPE",
+   "XRP",
+   "HYPE",
+   "NEAR",
+   "AAVE",
+   "AVAX",
+   "INJ",
+   "AKE",
+   "SUI",
+   "BNB",
+   "LINK",
+   "DOGE",
+   "ENA",
+   "UNI",
+   "ARB",
+   "WLD",
+   "JCT",
+   "INIT",
+   "TAO",
+   "LTC",
+   "ADA",
+   "PUMP",
+   "ONDO",
+   "AGT",
+   "ASTER",
+   "EVAA"
   ]
  }
 }
